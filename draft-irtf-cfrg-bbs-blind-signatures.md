@@ -245,8 +245,11 @@ Procedure:
                                   length(committed_message_scalars) + 1,
                                   "BLIND_" || api_id)
 
-3. return CoreCommit(blind_generators,
-                             committed_message_scalars, api_id)
+3. (commitment, proof, secret_prover_blind) =
+        CoreCommit(blind_generators, committed_message_scalars, api_id)
+
+4. return (commitment_with_proof_to_octets(commitment, proof),
+           secret_prover_blind)
 ```
 
 ### Commitment Validation and Deserialization
@@ -728,8 +731,7 @@ Procedure:
 6. for i in (1, 2, ..., M): m^_i = m~_i + msg_i * challenge
 
 7. proof = (s^, (m^_1, ..., m^_M), challenge)
-8. commitment_with_proof = commitment_with_proof_to_octets(C, proof)
-9. return (commitment_with_proof, secret_prover_blind)
+8. return (C, proof, secret_prover_blind)
 ```
 
 ### Core Commitment Verification

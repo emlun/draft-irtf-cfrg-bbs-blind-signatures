@@ -184,10 +184,9 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 # BBS Signature Scheme Operations
 
-This document makes use of various operations defined by the BBS Signature Scheme document [@!I-D.irtf-cfrg-bbs-signatures]. For clarity, whenever an operation will be used defined in [@!I-D.irtf-cfrg-bbs-signatures], it will be prefixed by "BBS." (e.g., "BBS.CoreVerify" etc.). More specifically, the operations used are the following:
+This document makes use of various operations defined by the BBS Signature Scheme document [@!I-D.irtf-cfrg-bbs-signatures]. For clarity, whenever an operation will be used defined in [@!I-D.irtf-cfrg-bbs-signatures], it will be prefixed by "BBS." (e.g., "BBS.ProofInit" etc.). More specifically, the operations used are the following:
 
 - `BBS.octets_to_point_E1`: Refers to the `octets_to_point_E1` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 1.2].
-- `BBS.CoreVerify`: Refers to the `CoreVerify` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 3.6.2].
 - `BBS.ProofInit`: Refers to the `ProofInit` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 3.7.2].
 - `BBS.ProofFinalize`: Refers to the `ProofFinalize` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 3.7.3].
 - `BBS.ProofVerifyInit`: Refers to the `ProofVerifyInit` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 3.7.4].
@@ -246,7 +245,8 @@ Procedure:
                                   "BLIND_" || api_id)
 
 3. (commitment, proof, secret_prover_blind) =
-        CoreCommit(blind_generators, committed_message_scalars, api_id)
+        CoreCommit(blind_generators, committed_message_scalars,
+                    (), api_id)
 
 4. return (commitment_with_proof_to_octets(commitment, proof),
            secret_prover_blind)
@@ -286,13 +286,13 @@ Procedure:
 5. if length(commitment_proof[1]) + 1 != length(blind_generators),
                                                           return INVALID
 
-6. validation_res = CoreCommitVerify(commitment, commitment_proof,
+6. validation_res = CoreCommitVerify(commitment, commitment_proof, (),
                                                blind_generators, api_id)
 7. if validation_res is INVALID, return INVALID
 8. return commitment
 ```
 
-## Blind BBS Signatures Interface
+## Blind BBS Signatures Interface {#blind-bbs-api}
 
 The following section defines a BBS Interface for blind BBS signatures. The identifier of the Interface is defined as `ciphersuite_id || BLIND_H2G_HM2S_`, where `ciphersuite_id` is the unique identifier of the BBS ciphersuite used, as defined in [@!I-D.irtf-cfrg-bbs-signatures, section 6]. Each BBS Interface MUST define operations to map the input messages to scalar values and to create the generator set, required by the core operations. The input messages to the defined Interface will be mapped to scalars using the `messages_to_scalars` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 4.1.2]. The generators will be created using the `create_generators` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 4.1.1].
 
@@ -377,8 +377,6 @@ Procedure:
 
 This operation validates a blind BBS signature (`signature`), given the Signer's public key (`PK`), a header (`header`), a set of messages (`messages`), including first the messages chosen by the Issuer and then the ones chosen (and committed to) by the Prover and if used, the `secret_prover_blind` as returned by the `Commit` operation ((#commitment-computation)).
 
-This operation makes use of the `CoreVerify` operation as defined in [@!I-D.irtf-cfrg-bbs-signatures, section 3.6.2].
-
 ```
 result = VerifyBlindSign(PK, signature, header, messages,
                           blind_messages, secret_prover_blind)
@@ -434,12 +432,13 @@ Procedure:
 5. proof_scalars = signer_scalars.append(secret_prover_blind)
                                           .append(committed_message_scalars)
 
-6. res = BBS.CoreVerify(PK,
-                        signature,
-                        generators.append(blind_generators),
-                        header,
-                        proof_scalars,
-                        api_id)
+6. res = CoreVerify(PK,
+                    signature,
+                    generators.append(blind_generators),
+                    header,
+                    proof_scalars,
+                    (),
+                    api_id)
 7. return res
 ```
 
@@ -460,7 +459,7 @@ The operation will accept two sets of messages: `issuer_messages` from the issue
 
 Furthermore, the operation also expects the `secret_prover_blind` (as returned from the `Commit` operation defined in (#commitment-computation)) value. If the BBS signature is generated using a commitment value, then the `secret_prover_blind` returned by the `Commit` operation used to generate the commitment should be provided to the `ProofGen` operation (otherwise the resulting proof will be invalid).
 
-This operation makes use of the `CoreProofGen` operation as defined in (#core-proof-generation).
+This operation makes use of the `CoreProofGen` operation as defined in (#coreproofgen).
 
 The operation will also accept two arrays that indicate the intended handling of each message, `issuer_message_disclosures` and  `blind_message_disclosures` respectively. Each entry corresponds to an issuer or blind message and can take one of the three values `DISCLOSE`, `HIDE` and `COMMIT`. A `DISCLOSE` value indicates that `messages[i]` will be revealed to the Verifier. Correspondingly, a `HIDE` value indicates that `messages[i]` will not be disclosed to the Verifier. Finally, a `COMMIT` value indicates that only a commitment to `messages[i]` will be disclosed to the Verifier, where  `messages[i]` is either `issuer_messages` or `blind_messages`.
 
@@ -575,7 +574,7 @@ Procedure:
 12. for (i = 0, i < length(blind_commitment_indexes), i++)
       proof_commitment_indexes.append(blind_commitment_indexes[i] + L + 1)
 
-13. proof_with_add_zkp_info = CoreProofGen(PK,
+13. (proof, add_zkp_info, r_key, dpkbar) = CoreProofGen(PK,
                         signature,
                         generators.append(blind_generators),
                         header,
@@ -583,8 +582,9 @@ Procedure:
                         proof_scalars,
                         proof_disclosed_indexes,
                         proof_commitment_indexes,
+                        (),
                         api_id)
-14. return proof_with_add_zkp_info
+14. return (proof, add_zkp_info)
 ```
 
 ### Proof Verification
@@ -681,6 +681,7 @@ Procedure:
 4. result = CoreProofVerify(
                         PK,
                         proof,
+                        (),
                         generators.append(blind_generators),
                         header,
                         ph,
@@ -693,20 +694,29 @@ Procedure:
 
 ## Core Operations
 
-### Core Commitment Computation
+### Core Commitment Computation {#core-commit}
 
 <!-- Once again this is only used for blind signing commitment. Should we rename? -->
 
+The `unproven_commitments` parameter is not used in the external
+Blind BBS Signatures Interface defined in (#blind-bbs-api);
+it is an extension point that can be used to extend the scheme
+with capabilities such as native key binding
+that use commitments to scalar values not directly known by the prover.
+Such commitments cannot be included in the message commitment proof,
+but instead may be proven by additional, separate proofs.
+
 ```
-(commitment_with_proof, secret_prover_blind) = CoreCommit(blind_generators,
-                                              committed_message_scalars,
-                                              api_id)
+(commitment_with_proof, secret_prover_blind) =
+    CoreCommit(blind_generators, committed_message_scalars,
+                unproven_commitments, api_id)
 
 Inputs:
 
 - blind_generators (REQUIRED), vector of pseudo-random points in G1.
 - committed_message_scalars (OPTIONAL), a vector of scalars. If not supplied,
                                  it defaults to the empty array ("()").
+- unproven_commitments (REQUIRED), a vector of points in G1.
 - api_id (OPTIONAL), an octet string. If not supplied it defaults to the
                      empty octet string ("").
 
@@ -714,9 +724,11 @@ Inputs:
 Deserialization:
 
 1. M = length(committed_message_scalars)
-2. if length(blind_generators) != M + 1, return INVALID
-3. (Q_2, J_1, ..., J_M) = blind_generators
-4. (msg_1, ..., msg_M) = committed_message_scalars
+2. K = length(unproven_commitments)
+3. if length(blind_generators) != M + K + 1, return INVALID
+4. (Q_2, J_1, ..., J_M, KJ_1, ..., KJ_K) = blind_generators
+5. (msg_1, ..., msg_M) = committed_message_scalars
+
 Procedure:
 
 1. (secret_prover_blind, s~, m~_1, ..., m~_M)
@@ -724,8 +736,8 @@ Procedure:
 2. C = J_1 * msg_1 + ... + J_M * msg_M + Q_2 * secret_prover_blind
 3. Cbar = J_1 * m~_1 + ... + J_M * m~_M + Q_2 * s~
 
-4. challenge = calculate_blind_challenge(C, Cbar, blind_generators,
-                                                                 api_id)
+4. challenge = calculate_blind_challenge(C, Cbar, unproven_commitments,
+                                          blind_generators, api_id)
 
 5. s^ = s~ + secret_prover_blind * challenge
 6. for i in (1, 2, ..., M): m^_i = m~_i + msg_i * challenge
@@ -738,6 +750,8 @@ Procedure:
 
 This operation is used by the Signer to verify the correctness of a `commitment_proof` for a supplied `commitment`, over a list of points of G1 called the `blind_generators`, used to compute that commitment.
 
+See (#core-commit) for discussion of the `unproven_commitments` parameter.
+
 ```
 result = CoreCommitVerify(commitment, commitment_proof,
                                                blind_generators, api_id)
@@ -746,6 +760,7 @@ Inputs:
 
 - commitment (REQUIRED), a commitment (see (#terminology)).
 - commitment_proof (REQUIRED), a commitment_proof (see (#terminology)).
+- unproven_commitments: PointG1[],
 - blind_generators (REQUIRED), vector of pseudo-random points in G1.
 - api_id (OPTIONAL), octet string. If not supplied it defaults to the
                      empty octet string ("").
@@ -760,16 +775,17 @@ Deserialization:
 1. (s^, commitments, cp) = commitment_proof
 
 2. M = length(commitments)
-3. (m^_1, ..., m^_M) = commitments
+3. K = length(unproven_commitments)
+4. (m^_1, ..., m^_M) = commitments
 
-4. if length(blind_generators) != M + 1, return INVALID
-5. (Q_2, J_1, ..., J_M) = blind_generators
+5. if length(blind_generators) != M + K + 1, return INVALID
+6. (Q_2, J_1, ..., J_M, KJ_1, ..., KJ_K) = blind_generators
 
 Procedure:
 
 1. Cbar = J_1 * m^_1 + ... + J_M * m^_M + Q_2 * s^ + commitment * (-cp)
-2. cv = calculate_blind_challenge(commitment, Cbar, blind_generators,
-                                                                 api_id)
+2. cv = calculate_blind_challenge(commitment, Cbar, unproven_commitments,
+                                    blind_generators, api_id)
 3. if cv != cp, return INVALID
 4. return VALID
 ```
@@ -811,7 +827,69 @@ Procedure:
 5. return BBS.signature_to_octets((A, e))
 ```
 
-### Core Proof Generation
+### CoreVerify
+
+
+This operation is identical to the `CoreVerify` operation defined in [@!I-D.irtf-cfrg-bbs-signatures, section 3.6.2]
+except for the addition of the `unproven_commitments` parameter,
+whose sum is added into the `B` value of the signature verification.
+
+See (#core-commit) for additional discussion of the `unproven_commitments` parameter.
+
+```
+result = CoreVerify(PK, signature, generators, header, messages,
+                    unproven_commitments, api_id)
+
+Inputs:
+
+- PK (REQUIRED), an octet string of the form outputted by the SkToPk
+                 operation.
+- signature (REQUIRED), an octet string of the form outputted by the
+                        Sign operation.
+- generators (REQUIRED), vector of pseudo-random points in G1.
+- header (OPTIONAL), an octet string containing context and application
+                     specific information. If not supplied, it defaults
+                     to the empty octet string ("").
+- messages (OPTIONAL), a vector of scalars representing the messages.
+                       If not supplied, it defaults to the empty
+                       array ("()").
+- unproven_commitments (REQUIRED), a vector of points in G1 representing
+                                   additional commitments that are not
+                                   proven or verified in
+                                   FinalizeBlindSign.
+- api_id (OPTIONAL), an octet string. If not supplied it defaults to the
+                     empty octet string ("").
+
+Parameters:
+
+- P1, fixed point of G1, defined by the ciphersuite.
+
+Outputs:
+
+- result, either VALID or INVALID.
+
+Deserialization:
+
+1. signature_result = octets_to_signature(signature)
+2. if signature_result is INVALID, return INVALID
+3. (A, e) = signature_result
+
+4. W = octets_to_pubkey(PK)
+5. if W is INVALID, return INVALID
+6. K = length(unproven_commitments)
+7. (dpk_1, ..., dpk_K) = unproven_commitments
+
+Procedure:
+
+1. domain = calculate_domain(PK, generators, header, api_id)
+2. B = multi_exponentiation_g1((P1, ...generators),
+                                               (1, domain, ...messages))
+       + dpk_1 + ... + dpk_K
+3. if h(A, W) * h(A * e - B, BP2) != Identity_GT, return INVALID
+4. return VALID
+```
+
+### Core Proof Generation {#coreproofgen}
 
 The Proof Generation with extension, combines the BBS Proof Generation operations (i.e., `BBS.ProofInit` and `BBS.ProofFinalize`) with a proof of correctness of commitments over some of the signed messages. The commitments proof of correctness will similarly constitute of a initialization and finalization phase. The two proof protocols will use a common challenge, returned by the `ProofChallengeCalculate` operation described in (#proof-challenge-calculation). The result of the commitments proof of correctness initialization process will be an object of the following form
 
@@ -825,6 +903,21 @@ CommitmentInitRes = {
 
 <!--Need to enhance to return information use for externally defined ZKPs.-->
 
+
+The `keybind_public_keys` parameter is not used in the external
+Blind BBS Signatures Interface defined in (#blind-bbs-api);
+it is an extension point that can be used to extend the scheme
+with capabilities such as native key binding
+that use commitments to scalar values not directly known by the prover.
+Such commitments require special handling in the BBS message proof;
+instead of proving direct knowledge of a private scalar `dsk`
+with commitment `dpk = dsk * H_k`,
+the message proof proves a commitment to `dpk`
+and knowledge of a random blinding factor `r_key`
+such that `dpkbar = dpk + r_key * H_k` and reveals `dpkbar`.
+Knowledge of `dsk` can then be proven indirectly
+by adding a separate proof of knowledge of `dsk + r_key`.
+
 Following, we describe the Proof Generation Procedure.
 
 
@@ -832,7 +925,9 @@ Following, we describe the Proof Generation Procedure.
 [proof, add_zkp_info] = CoreProofGen(PK, signature, generators,
                                      header, ph, messages,
                                      disclosed_indexes,
-                                     commitment_indexes, api_id)
+                                     commitment_indexes,
+                                     keybind_public_keys,
+                                     api_id)
 
 Inputs:
 
@@ -858,6 +953,8 @@ Inputs:
                                  ascending order. Indexes of committed
                                  messages. If not supplied, it defaults
                                  to the empty array ("()").
+- keybind_public_keys (REQUIRED), a vector of points in G1 committed to
+                                  as key binding public keys.
 - api_id (OPTIONAL), an octet string. If not supplied it defaults to the
                      empty octet string ("").
 
@@ -872,6 +969,10 @@ Outputs:
 - add_zkp_info, a structure containing an array of committed message scalars
                 used in committed disclosure, and the array of random scalars
                 used to create the respective commitments.
+- r_key, a vector of scalars. Randomized blinding factors for the key binding
+         public keys.
+- keybind_public_keys, a vector of points in G1. Key binding public keys
+                       randomized with the blinding factors in r_key.
 
 Deserialization:
 
@@ -889,70 +990,92 @@ Deserialization:
 8.  N = length(commitment_indexes)
 9.  R = length(disclosed_indexes)
 10. U = L - R
-11. (i1, ..., iR) = disclosed_indexes
-12. disclosed_messages = (messages[i1], ..., messages[iR])
-13. undisclosed_indexes = (0, 1, ..., L - 1) \ disclosed_indexes
-14. (j1, ..., jU) = undisclosed_indexes
-15. undisclosed_messages = (messages[j1], ..., messages[jU])
+11. K = length(keybind_public_keys)
+12. (i1, ..., iR) = disclosed_indexes
+13. disclosed_messages = (messages[i1], ..., messages[iR])
+14. undisclosed_indexes = (0, 1, ..., L - 1) \ disclosed_indexes
+15. (j1, ..., jU) = undisclosed_indexes
+16. undisclosed_messages = (messages[j1], ..., messages[jU])
+17. (dpk_1, ..., dpk_K) = keybind_public_keys
 
 Procedure:
 
 //  Get all needed random scalars at once
-1.  all_random_scalars = BBS.calculate_random_scalars(5 + U + 2*N)
-2.  (r1, r2, e~, r1~, r3~, m~_j1, ..., m~_jU, s_1, ..., s_N,
-                            s~_1, ..., s~_N) = all_random_scalars
-3.  init_random_scalars = (r1, r2, e~, r1~, r3~, m~_j1, ..., m~_jU)
+1.  all_random_scalars = BBS.calculate_random_scalars(5 + U + 2*N + 2*K)
+2.  (r1, r2, e~, r1~, r3~, m~_j1, ..., m~_jU,
+      s_1, ..., s_N, s~_1, ..., s~_N,
+      r_key_1, ..., r_key_K, r_key~_1, ..., r_key~_K)
+      = all_random_scalars
+3.  init_random_scalars = (r1, r2, e~, r1~, r3~, m~_j1, ..., m~_jU,
+                            r_key~_1, ..., r_key~_K)
 
 4.  init_res = BBS.ProofInit(PK,
                              signature_result,
                              generators,
                              init_random_scalars,
                              header,
-                             messages,
-                             undisclosed_indexes,
+                             (...messages, 0 for k in 1...K),
+                             (...undisclosed_indexes, k + L for k in 0...(K-1)),
                              api_id)
 5.  if init_res is INVALID, return INVALID
+6.  (Abar, Bbar_init, D_init, T1_init, T2_init, domain) = init_res
+
+7.  D_add = (dpk_1 + ... + dpk_K) * r2
+8.  D = D_init + D_add
+9.  Bbar = Bbar_init + D_add * r1
+10. T1 = T1_init + D_add * r1~
+11. T2 = T2_init + D_add * r3~
+12. for k in (1, 2, ..., K):
+      dpkbar_k = dpk_k + generators[L + 1 + k - 1] * r_key_k
 
 
 // Calculate the commitments and initiate the correctness proof
 
-6.  for i in (1, 2, ..., N):
-7.      idx = commitment_indexes[i]
-8.      C_i = Y_0 * s_i + Y_1 * messages[idx]
-9.      let k be the integer such that j_k == idx
-10.     C~_i = Y_0 * s~_i + Y_1 * m~_k
+13. for i in (1, 2, ..., N):
+14.     idx = commitment_indexes[i]
+15.     C_i = Y_0 * s_i + Y_1 * messages[idx]
+16.     let k be the integer such that j_k == idx
+17.     C~_i = Y_0 * s~_i + Y_1 * m~_k
 
-11. commitment_init_res = {commitments: (C_1, ..., C_N),
+18. commitment_init_res = {commitments: (C_1, ..., C_N),
                            commitments_proofs: (C~_1, ...,C~_N),
                            commitment_indexes: commitment_indexes}
 
-12. challenge = ProofChallengeCalculate(init_res, commitment_init_res,
+19. challenge = ProofChallengeCalculate((Abar, Bbar, D, T1, T2, domain),
+                                        commitment_init_res,
+                                        (dpkbar_1, ..., dpkbar_K),
                                         disclosed_messages, disclosed_indexes,
                                         ph, api_id)
-13. if challenge is INVALID, return INVALID
+20. if challenge is INVALID, return INVALID
 
-14. bbs_proof = BBS.ProofFinalize(init_res,
+21. bbs_proof = BBS.ProofFinalize((Abar, Bbar, D, T1, T2, domain),
                                   challenge,
                                   e,
                                   init_random_scalars,
-                                  undisclosed_messages)
+                                  (...undisclosed_messages,
+                                    (-r_key_k) for k in 1...K))
 
 // Finalize the commitment correctness proof
-15. for i in (1, 2, ..., N): s^_i =  s~_i + challenge * s_i
-16. commitments_proof = ((C_1, ..., C_N), (s^_1, ..., s^_N))
+22. for i in (1, 2, ..., N): s^_i =  s~_i + challenge * s_i
+23. commitments_proof = ((C_1, ..., C_N), (s^_1, ..., s^_N))
 
-17. proof = proof_to_octets(bbs_proof, commitments_proof)
-18. add_zkp_info = {committed_message_scalars:
+24. proof = proof_to_octets(bbs_proof, commitments_proof)
+25. add_zkp_info = {committed_message_scalars:
                        (messages[commitment_indexes[1]], ...,
                         messages[commitment_indexes[N]]),
                     commitment_rands: (s_1, ..., s_N)}
-19. return [proof, add_zkp_info]
+26. return [proof, add_zkp_info,
+            (r_key_1, ..., r_key_K), (dpkbar_1, ..., dpkbar_K)]
 ```
 
 ### Core Proof Verification
 
+See (#coreproofgen) for discussion of the `keybind_randomized_keys` parameter.
+
 ```
-result = CoreProofVerify(PK, proof, generators, header, ph,
+result = CoreProofVerify(PK, proof,
+                         keybind_randomized_keys,
+                         generators, header, ph,
                          disclosed_messages, disclosed_indexes,
                          commitment_indexes, api_id)
 
@@ -962,6 +1085,8 @@ Inputs:
                  operation.
 - proof (REQUIRED), an octet string of the form outputted by the
                         ProofGen operation.
+- keybind_randomized_keys (REQUIRED), vector of points in G1. Randomly
+                                      blinded key binding public keys.
 - generators (REQUIRED), vector of pseudo-random points in G1.
 - header (OPTIONAL), an optional octet string containing context and
                      application specific information. If not supplied,
@@ -1026,6 +1151,7 @@ Deserialization:
 20. (m^_j1, ..., m^_jU) = hats
 21. (C_1, ... C_N) = commitments
 22. (s^_1, ..., s^_N) = commitments_proof
+23. (dpkbar_1, ..., dpkbar_K) = keybind_randomized_keys
 
 Procedure:
 
@@ -1034,31 +1160,34 @@ Procedure:
                                                    disclosed_indexes,
                                                    api_id)
 2.  if init_res is INVALID, return INVALID
+3.  (Abar, Bbar, D, T1, T2_init, domain) = init_res
+4.  T2 = T2_init + (dpkbar_1 + ... + dpkbar_K) * cp
 
-3.  for i in (1, 2, ..., N):
-4.      idx = commitment_indexes[i]
-5.      let k be the integer such that j_k == idx
-6.      C^_i = Y_0 * s^_i + Y_1 * m^_k - C_i * cp
+5.  for i in (1, 2, ..., N):
+6.      idx = commitment_indexes[i]
+7.      let k be the integer such that j_k == idx
+8.      C^_i = Y_0 * s^_i + Y_1 * m^_k - C_i * cp
 
-7.  commitment_init_res = {commitments: (C_1, ..., C_N),
+9.  commitment_init_res = {commitments: (C_1, ..., C_N),
                            commitments_proofs: (C^_1, ...,C^_N),
                            commitment_indexes: commitment_indexes}
 
-8.  challenge = ProofChallengeCalculate(init_res, commitment_init_res,
+10. challenge = ProofChallengeCalculate((Abar, Bbar, D, T1, T2, domain), commitment_init_res,
+                                        keybind_randomized_keys,
                                         disclosed_messages, disclosed_indexes,
                                         ph, api_id)
-9.  if challenge is INVALID, return INVALID
+11. if challenge is INVALID, return INVALID
 
-10. if cp != challenge, return INVALID
-11. if e(Abar, W) * e(Bbar, -BP2) != Identity_GT, return INVALID
-12. return VALID
+12. if cp != challenge, return INVALID
+13. if e(Abar, W) * e(Bbar, -BP2) != Identity_GT, return INVALID
+14. return VALID
 ```
 
 # Utilities
 
 ## Messages to Scalars
 
-The `messages_to_scalars` operation is used to map a list of messages to their respective scalar values, which are required by the Blind BBS Signatures Interface in (#blind-bbs-signatures-interface). To accommodate additional ZKPs via the committed disclosure mechanism some messages may be treated as "raw" scalar values and others may be  "hashed". Each raw message value has a corresponding flag to indicate how it should be processed by this operation.
+The `messages_to_scalars` operation is used to map a list of messages to their respective scalar values, which are required by the Blind BBS Signatures Interface in (#blind-bbs-api). To accommodate additional ZKPs via the committed disclosure mechanism some messages may be treated as "raw" scalar values and others may be  "hashed". Each raw message value has a corresponding flag to indicate how it should be processed by this operation.
 
 ```
 msg_scalar = messages_to_scalars(messages, api_id)
@@ -1163,7 +1292,8 @@ Procedure:
 ## Blind Challenge Calculation
 
 ```
-challenge = calculate_blind_challenge(C, Cbar, generators, api_id)
+challenge = calculate_blind_challenge(C, Cbar, generators,
+                                      unproven_commitments, api_id)
 
 Inputs:
 
@@ -1171,6 +1301,7 @@ Inputs:
 - Cbar (REQUIRED), a point of G1.
 - generators (REQUIRED), an array of points from G1, of length at
                          least 1.
+- unproven_commitments (REQUIRED), an array of points from G1.
 - api_id (OPTIONAL), octet string. If not supplied it defaults to the
                      empty octet string ("").
 
@@ -1183,12 +1314,13 @@ Definition:
 Deserialization:
 
 1. if length(generators) == 0, return INVALID
-2. M = length(generators) - 1
+2. K = length(unproven_commitments)
+3. M = length(generators) - 1 - K
 
 Procedure:
 
-1. c_arr = (M)
-2. c_arr.append(generators)
+1. c_arr = (M, K)
+2. c_arr.append(generators).append(unproven_commitments)
 3. c_octs = BBS.serialize(c_arr.append(C, Cbar))
 4. return BBS.hash_to_scalar(c_octs, blind_challenge_dst)
 ```
@@ -1197,6 +1329,7 @@ Procedure:
 
 ```
 challenge = ProofChallengeCalculate(init_res, commitment_init_res,
+                                    keybind_randomized_keys,
                                     disclosed_messages, disclosed_indexes,
                                     ph, api_id)
 
@@ -1208,6 +1341,7 @@ Inputs:
                                  returned after initializing the commitments
                                  proof of correctness generation or
                                  verification.
+- keybind_randomized_keys (REQUIRED), a vector of points in G1.
 - disclosed_messages (OPTIONAL), a vector of scalars representing the
                                  messages. If not supplied, it defaults
                                  to the empty array ("()").
@@ -1250,6 +1384,7 @@ Deserialization:
 9.  (C_1, ..., C_N) = commitment_init_res.commitments
 10. (C~_1, ...,C~_N) = commitment_init_res.commitments_proofs
 11. (ci_1, ..., ci_N) = commitment_init_res.commitment_indexes
+12. K = length(keybind_randomized_keys)
 
 ABORT if:
 
@@ -1264,9 +1399,10 @@ Procedure:
 
 3. commitment_arr = (N, ci_1, C_1, C~_1, ..., ci_N, C_N, C~_N)
 4. c_octs = c_octs || BBS.serialize(commitment_arr)
+5. c_octs = c_octs || BBS.serialize((K).append(keybind_randomized_keys))
 
-5. c_octs = c_octs || I2OSP(length(ph), 8) || ph
-6. return BBS.hash_to_scalar(c_octs, hash_to_scalar_dst)
+6. c_octs = c_octs || I2OSP(length(ph), 8) || ph
+7. return BBS.hash_to_scalar(c_octs, hash_to_scalar_dst)
 ```
 
 ## Serialize
@@ -1456,7 +1592,7 @@ In the proof sent from the Prover to the Verifier the number of committed messag
 
 ## Input Validity Checks
 
-Applications using `CoreProofGen` (as defined in (#core-proof-generation)) only as a subroutine of `BlindProofGen` (as defined in (#proof-generation)), or `CoreProofVerify` (as defined in (#core-proof-verification)) only as a subroutine of `BlindProofVerify` (as defined in (#proof-verification)), can skip the checks of the `commitment_indexes` and `disclosed_indexes` inputs performed in the corresponding core operation, since the inputs provided by the calling operation will always have the correct form. However, if applications intend to use either core operation in different contexts, those checks must be applied.
+Applications using `CoreProofGen` (as defined in (#coreproofgen)) only as a subroutine of `BlindProofGen` (as defined in (#proof-generation)), or `CoreProofVerify` (as defined in (#core-proof-verification)) only as a subroutine of `BlindProofVerify` (as defined in (#proof-verification)), can skip the checks of the `commitment_indexes` and `disclosed_indexes` inputs performed in the corresponding core operation, since the inputs provided by the calling operation will always have the correct form. However, if applications intend to use either core operation in different contexts, those checks must be applied.
 
 # Security Considerations
 
